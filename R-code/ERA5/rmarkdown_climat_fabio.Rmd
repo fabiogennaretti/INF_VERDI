@@ -1,0 +1,551 @@
+---
+title: "Computation of the standardized precipitation evapotranspiration index (SPEI) using ERA5 reanalysis data"
+author: "Fabio Gennaretti, Marc-André Lemay"
+date: 'Jaunary 28, 2025'
+output:
+    html_document:
+bibliography: references.bib
+---
+
+# Objectives
+
+In this document, you will learn how to:
+
+* Use the `R` programming language to read and manipulate spatiotemporal data
+* Compute and interpret the standardized precipitation evapotranspiration index
+  (SPEI)
+* Represent data graphically using the `ggplot2` package
+
+This document is written in `R Markdown` format such that the text and code are
+intertwined. You will see the output of the code (console outputs and plots)
+appear in the document right after the code that produced it.
+
+# Required packages
+
+The following packages need to be installed and loaded for this analysis:
+
+```{r packages}
+library(terra) # Reading and processing of raster spatial data
+library(sf) # Reading and processing of vector spatial data
+library(SPEI) # Computation of the SPEI
+library(lubridate) # Makes date-time objects easier to work with
+library(ggplot2) # Complex plots made easy with the grammar of graphics
+library(parallel) # Parallel processing on multiple cores (not available on Windows)
+
+# Setting the number of cores available for processing based on operating system
+ncores <- if(.Platform$OS.type == "windows") 1 else 3
+```
+
+# Standardized precipitation evapotranspiration index (SPEI)
+
+The [SPEI](https://spei.csic.es/) is an index that is used to detect and
+quantify droughts over multiple spatial and temporal scales [@vicente2010].
+Negative SPEI values indicate conditions that are drier than normal, whereas
+positive values indicate conditions that are wetter than normal. The SPEI can
+be computed over various time scales to detect droughts that last only a few
+days or weeks to droughts that last several years.
+
+The SPEI is computed based on the difference between the water brought by
+precipitation and the water that was potentially taken away by
+evapotranspiration. The word "potentially" is important here: it is the
+potential for evapotranspiration that is more important than the
+evapotranspiration itself. Indeed, under drought conditions, it is likely for
+potential evapotranspiration to be higher than actual evapotranspiration
+because water sources have been exhausted.
+
+The difference between daily precipitation and potential evapotranspiration is
+called the daily water balance. The `SPEI` package uses time series of daily
+water balance to transform them into a normalized index covering the time scale
+of interest. The normalization process involves comparison to daily water
+balance values at similar times of the year over several years. Computing SPEI
+therefore requires relatively long time series.
+
+Here, we will calculate SPEI over the province of Quebec and analyze a
+three-week drought that occured at the end of August 2021 in western Quebec.
+We will look at the temporal trends of SPEI over the year 2021 and the spatial
+trends of SPEI over the province at the peak of the drought.
+
+# Source data
+
+Computing the SPEI requires precipitation data and potential evapotranspiration
+(PET) data at daily scale.
+
+Here, precipitation data was obtained from the ERA5 reanalysis [@hersbach2020]
+through the [Climate Explorer](https://climexp.knmi.nl/select.cgi?id=someone@somewhere&field=era5_prcp_daily)
+web platform [@trouet2013]. The spatial resolution of the data is 0.5° (both in
+latitude and longitude) and the temporal resolution is daily. This data was
+subsetted to the spatial region (longitude -90° to -50° and latitude 40° to
+65°) and time span (1981-2023) of interest. Precipitation data is represented
+in mm/day.
+
+While several methods can be used to compute PET from various meteorological
+inputs, here we used [pre-computed PET data](https://data.bris.ac.uk/data/dataset/qb8ujazzda0s2aykkv0oq0ctp)
+at daily scale from published research [@singer2021] and always derived from ERA5 data. 
+The original spatial resolution is 0.1°. I aggregated them to 0.5° in order to facilitate the lab (same spatial and temporal extent as the precipitation data). PET data is also represented in mm/day.
+
+Surface temperature data is not necessary for computing SPEI (at least not
+directly), but for the sake of comparing August 2021 temperatures to historical
+temperatures for the same period, we also obtained surface temperature data
+from [Climate Explorer](https://climexp.knmi.nl/select.cgi?id=someone@somewhere&field=era5_t2m_daily)
+and subsetted it similarly to the precipitation and PET data. The temperature
+is represented in Kelvin.
+
+All datasets are in the netCDF format (file extension .nc), which is commonly
+used to represent spatiotemporal meteorological data. Fortunately, you do not
+need to know anything about this format because the `terra` package seamlessly
+reads this format into raster objects that can be manipulated in `R`.
+
+# Computing the SPEI at local site scale
+
+We will first compute the SPEI at four locations of interest in the
+Abitibi-Témiscamingue region of Quebec, Canada. To do this, we need to get the
+precipitation and PET data into a `data.frame` with one row per day/location
+combination over the time period of interest. For that, we use the following
+function which leverages functionality form the `terra` (raster spatial data)
+and `sf` (vector spatial data) packages to extract meteorological data at
+specific points of interest.
+
+```{r ncdf_to_df}
+#' Format a netcdf dataset as a data.frame based on site locations
+#'
+#' This function needs a netcdf file (or really any file that can be
+#' read using the terra package and has a time attribute) and an sf
+#' object of point locations to extract the data for.
+#'
+#' @param filename A character, the name of the file containing the climate data
+#' in netcdf format.
+#' @param locations An sf object containing points denoting the locations to
+#' extract the data for.
+#' @param col_name A character, the name of the column to put the extracted
+#' values into. Defaults to "variable".
+#' @param agg A numeric value indicating the aggregation factor for the raster
+#' If NULL (the default), then no aggregation is done. na.rm is set to TRUE for
+#' aggregation.
+#' @param site_col A character denoting the column containing the names of the
+#' sites in the locations sf dataset. Optional: if NULL (the default), then the
+#' output data.frame will not contain a "site" column.
+#' @param time_range A length-two vector of dates in POSIXct format denoting
+#' the first date (inclusive range) and last date (exclusive range) to use to
+#' subset the input raster. Filtering is done based on the "time" arribute
+#' of the raster.
+#'
+#' @return A data.frame with columns for the day, site and variable.
+ncdf_to_df <- function(filename, locations, col_name = "variable",
+                       agg = NULL, site_col = NULL, time_range = NULL) {
+        
+        # Reading the raster using the terra package
+        rdata <- rast(filename)
+
+        # Optionally filtering the raster layers based on time
+        if(!is.null(time_range)) rdata <- rdata[[time(rdata) >= time_range[1] & time(rdata) < time_range[2]]]
+
+        # Optionally aggregating the data
+        # We need to preserve the time stamps
+        if(!is.null(agg)) {
+                times <- time(rdata)
+                rdata <- aggregate(rdata, fact = agg, na.rm = TRUE)
+                time(rdata) <- times
+        }
+
+        # Transforming the locations to the coordinate reference system of the raster and
+        # using them to extract data
+        locations <- st_transform(locations, st_crs(rdata))
+        ldata <- t(as.matrix(extract(rdata, locations, ID = FALSE)))
+
+        # Initializing the output data.frame
+        output_df <- expand.grid(day = 1:nlyr(rdata),
+                                 site = 1:nrow(locations))
+
+        # Getting the data corresponding to that day and site by matrix indexing
+        output_df[[col_name]] <- ldata[as.matrix(output_df)]
+
+        # Getting the day in POSIXct format from the time attribute of the input raster
+        output_df$day <- time(rdata)[output_df$day]
+
+        # Optionally modifying the name of the site using the site_col column in the sf object
+        if(!is.null(site_col)) output_df$site <- locations[output_df$site, ][[site_col]]
+
+        output_df
+}
+```
+
+We can now use our function to read the datasets and look at their structure.
+The PET data is scattered across several files (one per year) so we use
+`lapply` to read several files with a single function call. Here, we first
+extract data for four sites of interest on which we want to focus.
+
+```{r site-spei-input, message = FALSE}
+# Read the data on the location of the study sites
+sites <- st_read("../../data/sites/sites.shp", quiet = TRUE)
+
+print(sites)
+
+# Preparing the data.frame of precipitation data at the site (AMS, BEC, AUC, AUS) scale
+site_precip <- ncdf_to_df("../../data/era5_data/era5_tp_daily_quebec.nc",
+                          locations = sites,
+                          col_name = "precip",
+                          site_col = "SITE",
+                          time_range = as.POSIXct(c("1981-01-01", "2024-01-01")))
+
+str(site_precip)
+
+# Preparing the data.frame of potential evapotranspiration data at the site scale
+# The data is scattered across several files so we need to read them separately
+site_pet <- ncdf_to_df("../../data/pet_data/daily_pet_quebec_combined.nc",
+                                             locations = sites,
+                                             col_name = "pet",
+                                             site_col = "SITE")
+
+str(site_pet)
+```
+
+Now that we have read and formatted the precipitation and PET data, we can
+compute the daily water balance and the SPEI. The following function is a
+wrapper around the `spei` function of the `SPEI` package. It computes the daily
+water balance and formats the data for proper input to `spei`. It returns a
+`data.frame` similar to the input one, but to which a column called `"spei"`
+has been added with the SPEI of each day.
+
+```{r compute_spei}
+#' Compute SPEI from data.frames of precipitation and potential evapotranspiration data
+#'
+#' This function computes the SPEI at a daily scale using input daily
+#' precipitation and potential evapotranspiration data to compute the daily
+#' water balance. The SPEI itself is computed using the spei function of the
+#' SPEI package. The function will throw an error if any sites have a mix
+#' of NA and non-NA values. However, if a given site has all NA values,
+#' such as is the case for sites located over water bodies, then a value
+#' of NA is returned for the SPEI at that site. This function also does not
+#' use December 31 on leap years because the spei function needs all years
+#' to have 365 days.
+#'
+#' @param precip_df A data.frame of precipitation data (in mm/day) such as
+#' extracted using the ncdf_to_df function. Must contain a "precip" column for
+#' the precipitation values.
+#' @param pet_df A data.frame of potential evapotranspiration data (in mm/day)
+#' such as extracted using the ncdf_to_df function. Must contain a "pet" column
+#' for the potential evapotranspiration values.
+#' @param start_year A numeric value indicating the first year for which
+#' data are available.
+#' @param scale A numeric value indicating the time window (in days) for
+#' which the SPEI is to be computed. A time window of 7, for example, means
+#' that the SPEI on a given day depends on the values of the past week.
+#' @param ncores An integer indicating the number of cores to use for
+#' SPEI computation. It effectively splits the SPEI computation at different
+#' sites.
+#'
+#' @return A data.frame similar to the input ones with an added "spei" column
+#' denoting the SPEI.
+compute_spei <- function(precip_df, pet_df, start_year, scale, ncores = 3) {
+
+        # Sanity checks
+        stopifnot("precip" %in% colnames(precip_df))
+        stopifnot("pet" %in% colnames(pet_df))
+
+        # Sort the data by time and site name and check that the timestamps are the same
+        pet_df <- pet_df[order(pet_df$site, pet_df$day), ]
+        precip_df <- precip_df[order(precip_df$site, precip_df$day), ]
+        stopifnot(all(precip_df$day == pet_df$day & precip_df$site == pet_df$site))
+
+        # Computing the water balance (precipitation - potential evapotranspiration)
+        precip_df$pet <- pet_df$pet
+        precip_df$balance <- precip_df$precip - precip_df$pet
+
+        # We remove December 31 on leap years because each year needs to have 365 days
+        # for input to the spei function
+        precip_df <- precip_df[!(leap_year(precip_df$day) &
+                                 month(precip_df$day) == 12 &
+                                 day(precip_df$day) == 31), ]
+
+        stopifnot(nrow(precip_df) %% 365 == 0)
+
+        # We compute the spei on each site separately using mclapply
+        precip_df$spei <- unlist(mclapply(split(precip_df, precip_df$site), function(x) {
+                                                  stopifnot(!is.unsorted(x$day))
+                                                  if(all(is.na(x$balance))) return(rep(NA, nrow(x)))
+                                                  balance_ts <- ts(x$balance, start = start_year, frequency = 365)
+                                                  spei(data = balance_ts, scale = scale, verbose = FALSE)$fitted},
+                                                  mc.cores = ncores))
+
+        # Returning the data.frame with the added SPEI column
+        precip_df
+}
+```
+
+With this function, we can effectively compute the SPEI at the four sites of
+interest over the period 1981-2023. We use a `scale` parameter of 21 because we
+want to compute the SPEI over a three-week time scale. Therefore, every SPEI
+value will reflect the drought conditions over the previous three weeks.
+
+```{r site-spei}
+# Actually computing the SPEI at the site scale
+site_spei <- compute_spei(precip_df = site_precip,
+                          pet_df = site_pet,
+                          start_year = 1981,
+                          scale = 21,
+                          ncores = ncores)
+
+str(site_spei)
+```
+
+Let us look at the time series of SPEI over the year 2021. We can see that the
+SPEI reaches a minimum towards the end of August, which corresponds to the
+drought that we are interested in.
+
+```{r site-spei-plot, fig.width = 8, fig.height = 8}
+# Looking at how extreme the end of August was within 2021
+site_spei_2021 <- site_spei[year(site_spei$day) == 2021, ]
+
+head(site_spei_2021[order(site_spei_2021$spei), ])
+
+site_spei_plot <- ggplot(site_spei_2021, aes(x = as.POSIXct(day), y = spei, color = site)) +
+        geom_line() +
+        # facet_wrap(~month(day, label = TRUE, abbr = FALSE), scales = "free_x") +
+        geom_hline(yintercept = 0, color = "red", linetype = 2) +
+        # scale_x_datetime(name = "Date", date_breaks = "7 days", date_labels = "%d", expand = c(0.01, 0.01)) +
+        scale_x_datetime(name = "Month", date_breaks = "1 month", date_labels = "%b", expand = c(0.01, 0.01)) +
+        ylab("SPEI") +
+        theme_bw()
+
+print(site_spei_plot)
+```
+
+# Computing the SPEI at regional scale
+
+The time-series data at four sites of interest has shown that there was a
+drought going on in the study area towards the end of August 2021. We may also
+be interested to know how widespread that drought was at a regional scale.
+
+The following code leverages the same functions as above to compute the SPEI
+over the whole area covered by the input datasets and not only at the four sites
+of interest. Because this is considerably more computationally intensive, we
+will compute SPEI over a reduced resolution of 2.5° instead of 0.5° as we did
+before.
+
+```{r map-spei-input, message = FALSE}
+# Creating an sf object for the grid coordinates to extract the data
+# The aggregation factor converts from 0.1-degree to 1-degree resolution
+coord_rast <- aggregate(rast("../../data/pet_data/daily_pet_quebec_combined.nc"), fact = 5)
+
+# We create a data.frame that is analogous to the one we used for sites before,
+# except this time we have one point for every grid cell in the PET raster
+coord_sf <- st_as_sf(as.data.frame(xyFromCell(coord_rast, 1:ncell(coord_rast))),
+                     coords = c("x", "y"),
+                     dim = "XY",
+                     crs = st_crs(coord_rast))
+
+coord_sf$SITE <- 1:nrow(coord_sf)
+
+print(coord_sf)
+
+# Reading the precipitation values at each of those points
+# The agg argument converts from 0.5° to 1° resolution
+map_precip <- ncdf_to_df("../../data/era5_data/era5_tp_daily_quebec.nc",
+                         agg = 2,
+                         locations = coord_sf,
+                         col_name = "precip",
+                         site_col = "SITE")
+
+str(map_precip)
+
+# Reading the pet data for preparing the map
+map_pet <- ncdf_to_df("../../data/pet_data/daily_pet_quebec_combined.nc",
+                         agg = 2,
+                         locations = coord_sf,
+                         col_name = "pet",
+                         site_col = "SITE")
+
+str(map_pet)
+
+# Actually computing the SPEI from the combination of precipitation and potential evapotranspiration
+map_spei <- compute_spei(precip_df = map_precip,
+                         pet_df = map_pet,
+                         start_year = 1981,
+                         scale = 21,
+                         ncores = ncores)
+
+# This is a very large data.frame!
+str(map_spei)
+```
+
+Because we are particularly interested in SPEI values for August 31, we now
+extract the values for that day specifically and format them as a raster. At
+this point, the raster could be exported to a file (for example in .tiff
+format) or could be kept in memory for further processing. For this document,
+we will use it for plotting the data.
+
+```{r map-spei-raster}
+# Extracting the data only for the 21-day period ending on August 31, 2021
+spei_august31 <- map_spei[year(map_spei$day) == 2021 & month(map_spei$day) == 8 & day(map_spei$day) == 31, ]
+
+# Converting this dataset to a raster
+spei_raster <- as.data.frame(st_coordinates(coord_sf))
+stopifnot(all.equal(spei_august31$site, coord_sf$SITE))
+spei_raster$spei <- spei_august31$spei
+
+# The rast function has a method to convert from data.frame to raster
+# provided that we meet certain formatting requirements
+spei_raster <- rast(spei_raster)
+
+# We need to set the coordinate reference system of the newly created raster
+crs(spei_raster) <- crs(coord_sf)
+
+# Let us check if everything looks fine
+print(spei_raster)
+```
+
+# Plotting SPEI and climate anomalies at regional scale
+
+Now that we have formatted the SPEI data as a raster, it is easy to plot it
+using functionality from the `terra` package.
+
+```{r terra-plot-spei, fig.width = 8, fig.height = 8}
+plot(spei_raster)
+```
+
+However, that map does not quite meet all our needs. In particular, we would
+like to add a world map outline and be able to add the location of our sites on
+the map. This is particularly useful if we want to produce maps for
+communicating our results with a wider audience. This following function
+provides functionality for doing exactly that using `ggplot2` functions to
+extract world map data and plot our raster and point data.
+
+```{r anomaly_plot}
+#' Produce an anomaly plot from a raster
+#' 
+#' This function takes a raster and formats it for plotting using
+#' ggplot2 against a world map background.
+#'
+#' @param dataset Raster data (in longitude/latitude coordinates) to use for
+#' plotting. Must have already been computed as anomalies as no post-processing
+#' of the data is done other than formatting.
+#' @param scale_name A character string to use as the name of the color scale.
+#' @param point_coordinates A data.frame of point coordinates to use
+#' for plotting the locations of the study sites.
+#'
+#' @return A ggplot object representing a complete anomaly plot with color
+#' scale/legend.
+anomaly_plot <- function(dataset, scale_name, point_coordinates) {
+
+        # Re-formatting the raster as a data.frame for plotting
+        anomalies <- as.data.frame(xyFromCell(dataset, 1:ncell(dataset)))
+        anomalies$value <- extract(dataset, as.matrix(anomalies))[[1]]
+        names(anomalies) <- c("longitude", "latitude", "value")
+
+        # Remove the NA values because otherwise they appear gray
+        anomalies <- anomalies[!is.na(anomalies$value), ]
+
+        # Getting the world map from ggplot
+        world_map <- map_data("world")
+
+        ggplot(world_map, aes(x = long, y = lat)) +
+                geom_polygon(aes(group = group), fill = "gray", color = "black") +
+                geom_tile(data = anomalies, aes(x = longitude, y = latitude, fill = value), alpha = 0.8) +
+                scale_fill_gradient2(name = scale_name, low = "blue", mid = "white", high = "red") +
+                coord_cartesian(xlim = c(-90, -50), ylim = c(40, 65), expand = FALSE) +
+                geom_point(data = point_coordinates, aes(x = x, y = y), size = 0.8) +
+                geom_text(data = point_coordinates, aes(x = x + 0.5, y = y + 0.5, label = label), hjust = 0) +
+                scale_x_continuous(name = "Longitude") +
+                scale_y_continuous(name = "Latitude") +
+                theme_bw() +
+                theme(axis.text = element_text(color = "black"),
+                      axis.ticks = element_line(color = "black"),
+                      panel.grid = element_blank(),
+                      legend.key.width = unit(0.1, "in"))
+}
+```
+
+We can use this function to display our SPEI data along with site coordinates:
+
+```{r anomaly-spei-plot, fig.width = 8, fig.height = 8}
+spei_plot <- anomaly_plot(dataset = spei_raster,
+                          point_coordinates = data.frame(x = -78.56954, y = 48.91466, label = "Sites"),
+                          scale_name = "SPEI")
+
+print(spei_plot)
+```
+
+While the SPEI contains information about the water balance, it would be
+interesting to also look at the anomalies in temperature and precipitation to
+disentangle the contribution of these two variables. To do this, we will use
+the following function that computes anomalies (differences between a
+particular value and the average over some time period) for a given input
+variable. The function will compare the period from August 11 to 31 2021 to the
+same time period for the years 1981-2023 (except 2021 which is left out).
+
+```{r compute_anomalies}
+#' Compute anomalies from a raster time-series
+#'
+#' Using a time-series of raster data, computes the anomaly of August 11-31,
+#' 2021 compared to the same time period for all other years. At the moment
+#' these dates are hard-coded but this could be made a user-controllable
+#' parameter if needed.
+#'
+#' @param filename A character, the name of a file containing the raster
+#' time-series.
+#' @param agg A numeric value, the aggregation factor to use in computing
+#' the anomalies. If NULL (the default), no aggregation is done.
+#'
+#' @return A raster with similar x/y dimensions as the input with the anomalies
+#' for the period considered (drought period minus same period in other years).
+compute_anomalies <- function(filename, agg = NULL) {
+        # Reading the dataset
+        dataset <- rast(filename)
+        
+        # Optionally aggregating the dataset while preserving timestamps
+        if(!is.null(agg)) {
+                times <- time(dataset)
+                dataset <- aggregate(dataset, fact = agg)
+                time(dataset) <- times
+        }
+
+        # Determining which tiles are part of the drought period
+        # August 11 to 31, 2024
+        drought_tiles <- time(dataset) >= as.POSIXct("2021-08-11", format = "%Y-%m-%d") & 
+                time(dataset) < as.POSIXct("2021-09-01", format = "%Y-%m-%d")
+
+        # Determining which tiles correspond to the reference period
+        # August 11 to 31 of all years BUT 2021
+        reference_tiles <- month(time(dataset)) == 8 & day(time(dataset)) %in% 11:31
+        reference_tiles <- xor(drought_tiles, reference_tiles)
+
+        # Computing the anomalies by subtracting the historical average from the average over the drought
+        anomalies <- mean(dataset[[drought_tiles]]) - mean(dataset[[reference_tiles]])
+
+        anomalies
+}
+```
+
+We can now use the functions `compute_anomalies` and `anomaly_plot` together to
+plot the temperature and precipitation anomalies. As we can see, temperature
+was unusually high and precipitation was unusually low over the period of
+interest in our study area. Therefore, both factors contributed to the drought
+conditions that are reflected in the SPEI values.
+
+```{r prec-temp-anomalies, fig.width = 8, fig.height = 8}
+# Preparing the anomalies of temperature and precipitation
+temp <- compute_anomalies("../../data/era5_data/era5_t2m_daily_quebec.nc", agg = 2)
+prec <- compute_anomalies("../../data/era5_data/era5_tp_daily_quebec.nc", agg = 2)
+
+temp_plot <- anomaly_plot(dataset = temp,
+                          point_coordinates = data.frame(x = -78.56954, y = 48.91466, label = "Sites"),
+                          scale_name = "Air temperature\n anomaly (K)")
+
+print(temp_plot)
+
+prec_plot <- anomaly_plot(dataset = prec,
+                          point_coordinates = data.frame(x = -78.56954, y = 48.91466, label = "Sites"),
+                          scale_name = "Precipitation\n anomaly\n (mm/day)")
+
+print(prec_plot)
+```
+
+This document was computed under the following computing environment. If you
+experience any problems, check if your package versions match the ones listed
+below.
+
+```{r session-info}
+sessionInfo()
+```
+
+# References

@@ -20,14 +20,27 @@ This site will be used for lab exercises on specific themes.
       
 ## Themes
 
+<!-- 
 1. Exemple theme
 
       [Exercise](R-code/test.html)
       
       Data: [Pivot.SC.crn.csv](data/test.csv)
-      
+-->
 
-## Mini-Projects 2024
+1. ERA5 manipulation and SPEI computation (Marc-Andre Lemay)
+
+      [Exercise](R-code/ERA5/rmarkdown_climat_fabio.html)
+      
+      Data: [site_location.shp](data/sites/sites.zip)
+      
+      Data: 2mTemperature.nc (on moodle)
+      
+      Data: precipitation.nc (on moodle)
+      
+      Data: potential_evapotranspiration.nc (on moodle)
+
+## Mini-Projects 2025
 
 
 ## Programs
