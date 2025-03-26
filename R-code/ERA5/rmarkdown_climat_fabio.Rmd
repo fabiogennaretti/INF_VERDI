@@ -170,9 +170,7 @@ ncdf_to_df <- function(filename, locations, col_name = "variable",
 ```
 
 We can now use our function to read the datasets and look at their structure.
-The PET data is scattered across several files (one per year) so we use
-`lapply` to read several files with a single function call. Here, we first
-extract data for four sites of interest on which we want to focus.
+Here, we first extract data for four sites of interest on which we want to focus.
 
 ```{r site-spei-input, message = FALSE}
 # Read the data on the location of the study sites
