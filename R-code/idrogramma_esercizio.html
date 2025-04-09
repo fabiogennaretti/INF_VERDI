@@ -9,9 +9,10 @@
 <meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
 
 
+<meta name="author" content="Fabio Gennaretti" />
 
 
-<title>LM FORESPA - Cambiamenti Climatici e Infrastrutture Verdi Territoriali e Urbane</title>
+<title>Esercizio: Calcolo dell’idrogramma di piena con la formula razionale</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -348,54 +349,174 @@ display: none;
 
 
 
-<h1 class="title toc-ignore">LM FORESPA - Cambiamenti Climatici e
-Infrastrutture Verdi Territoriali e Urbane</h1>
+<h1 class="title toc-ignore">Esercizio: Calcolo dell’idrogramma di piena
+con la formula razionale</h1>
+<h4 class="author">Fabio Gennaretti</h4>
 
 </div>
 
 
-<p>LM FORESPA</p>
-<p>CFU previsti: 6</p>
-<p>Docente: Fabio Gennaretti</p>
-<p>Mail: <a href="mailto:f.gennaretti@univpm.it" class="email">f.gennaretti@univpm.it</a></p>
-<p>This material is available under a license [CC0 1.0 Universal]</p>
-<div id="info-and-syllabus" class="section level2">
-<h2>Info and syllabus</h2>
-<p><a href="pdf/Syllabus_Clima_Infrastrutture_Verdi_2.pdf">Syllabus</a></p>
-<p>All lectures of the course will be provided in the Moodle
-application. This site will be used for lab exercises on specific
-themes.</p>
+<div id="obiettivo" class="section level2">
+<h2>Obiettivo</h2>
+<p>Calcolare la portata al colmo e costruire un idrogramma di piena
+semplificato per il tetto di un capannone da trasformare in tetto verde
+(il nostro bacino idrografico), usando la formula razionale. Si immagina
+che le grondaie del capannone convergano tutte in un unico punto di
+raccolta.</p>
+<p>Ecco come si presenta la formula:</p>
+<p><span class="math inline">\(Q_p = \varphi \cdot I \cdot
+A\)</span></p>
 </div>
-<div id="themes" class="section level2">
-<h2>Themes</h2>
-<!-- 
-1. Exemple theme
+<div id="dati-del-problema" class="section level2">
+<h2>Dati del problema</h2>
+<ul>
+<li><strong><span class="math inline">\(A\)</span></strong> (ha):
+Superficie del tetto in ettari da convertire in “m²”;</li>
+<li><strong><span class="math inline">\(\varphi\)</span></strong>:
+Coefficiente di afflusso, rappresenta la frazione dell’acqua piovana che
+effettivamente scorre sulla superficie. Dipende dalla permeabilità della
+copertura (es. impermeabile o verde) e dalla pendenza;</li>
+<li><strong><span class="math inline">\(I\)</span></strong> (mm/h):
+Intensità di pioggia;</li>
+<li><strong><span class="math inline">\(L\)</span></strong> (m):
+Lunghezza massima dal punto più distante del tetto al punto di
+scolo;</li>
+<li><strong><span class="math inline">\(v\)</span></strong> (m/s):
+Velocità del ruscellamento;</li>
+<li><strong><span class="math inline">\(d\)</span></strong> (s): Durata
+della pioggia.</li>
+</ul>
+</div>
+<div id="calcoli" class="section level2">
+<h2>Calcoli</h2>
+<p>I calcoli utilizzano i parametri fisici e idrologici necessari per
+calcolare <strong><span class="math inline">\(Q_p\)</span></strong>
+(m³/s): la portata al colmo, ovvero la massima portata d’acqua che
+defluisce dal tetto al punto di scolo durante l’evento di pioggia;</p>
+<pre class="r"><code># Superficie del tetto in ettari
+A_ha &lt;- 1
 
-      [Exercise](R-code/test.html)
-      
-      Data: [Pivot.SC.crn.csv](data/test.csv)
--->
+# Conversione della superficie da ettari a metri quadrati (1 ha = 10.000 m²)
+A_m2 &lt;- A_ha * 10000
+
+# Coefficiente di afflusso (φ): frazione dell&#39;acqua piovana che genera deflusso
+phi &lt;- 1
+
+# Intensità della pioggia in mm/h
+I_mm_h &lt;- 50
+
+# Conversione dell’intensità da mm/h a m/s
+# (1 mm = 0.001 m; 1 h = 3600 s)
+I_m_s &lt;- I_mm_h / 1000 / 3600
+
+# Lunghezza del percorso di deflusso (dal punto più lontano al punto di raccolta) in metri
+L &lt;- 150
+
+# Velocità di ruscellamento in m/s
+v &lt;- 0.6
+
+# Tempo di corrivazione (tempo necessario affinché l&#39;acqua raggiunga il punto di scolo)
+Tc_sec &lt;- L / v
+
+# Tempo di discesa dell’idrogramma (stimato come 2 volte Tc)
+Tdiscesa &lt;- 2 * Tc_sec
+
+# Durata della pioggia in secondi
+d &lt;- 400
+
+# Calcolo della portata al colmo (Qp) con la formula razionale: Qp = φ * I * A
+Qp &lt;- phi * I_m_s * A_m2
+
+# Visualizzazione del risultato della portata al colmo in m³/s
+Qp</code></pre>
+<pre><code>## [1] 0.1388889</code></pre>
+</div>
+<div id="costruzione-dellidrogramma-semplificato-trapezoidale" class="section level2">
+<h2>Costruzione dell’idrogramma (semplificato, trapezoidale)</h2>
+<ul>
+<li>Tempo di corrivazione: 250 secondi — è il tempo impiegato dalla
+goccia più lontana per raggiungere la sezione di chiusura;</li>
+<li>Tempo di discesa dell’idrogramma: 500 secondi — stimato come due
+volte il tempo di corrivazione;</li>
+<li>Durata totale dell’evento: 900 secondi — somma della durata della
+pioggia e della fase di deflusso;</li>
+<li>Portata al colmo (picco di portata): 0.14 m³/s — portata massima
+calcolata con la formula razionale.</li>
+</ul>
+<p>Queste stime saranno utilizzate per costruire un idrogramma di piena
+semplificato, ovvero la curva che descrive l’andamento della portata nel
+tempo durante e dopo l’evento di pioggia.</p>
+<pre class="r"><code># Preparare il data.frame con una time series in cui calcolare l&#39;idrogramma
+Idro = data.frame(tempo = seq(0,ceiling(Tc_sec+d+Tdiscesa),by=10))
+
+#&#39; Funzione per calcolare l&#39;idrogramma (portata nel tempo) usando un&#39;approssimazione trapezoidale
+#&#39;
+#&#39; @param tempo vettore dei tempi (in secondi) in cui vogliamo calcolare la portata;
+#&#39; @param Qp portata al colmo (in m³/s), cioè il valore massimo della portata durante 
+#&#39; un evento di durata &gt; Tc_sec;
+#&#39; @param Tdiscesa: durata della fase di decrescita della portata (in secondi),
+#&#39; stimata come 2 volte il tempo di corrivazione.
+#&#39;
+#&#39; @return Restituire il vettore delle portate
+calcola_portata_lapply &lt;- function(tempo, Qp, Tdiscesa) {
+  # Usare lapply per applicare la funzione a ogni elemento di tempo
+  portata &lt;- lapply(tempo, function(t) {
+    if (t &lt;= d &amp; t &lt;= Tc_sec) {
+      return(t / Tc_sec * Qp)  # Prima fase: proporzionale al tempo
+    } else if (t &lt;= d &amp; t &gt; Tc_sec) {
+      return(1 * Qp)  # Seconda fase: valore al picco
+    } else {
+      return((1-((t-d)/Tdiscesa)) * ifelse(d &lt; Tc_sec, d/Tc_sec, 1) * Qp)  # Terza fase: decrescita
+    }
+  })
+
+  # Restituire il vettore delle portate e impedire che la portata sia &lt; 0
+  return(ifelse(portata&lt;0,0, unlist(portata)))
+}
+
+# Applicare la funzione a Idro$tempo
+Idro$portata &lt;- calcola_portata_lapply(Idro$tempo, Qp, Tdiscesa)
+
+# Visualizzazione del risultato
+plot(Idro$tempo, Idro$portata, type=&quot;l&quot;, col=&quot;blue&quot;, 
+     xlab=&quot;Tempo (s)&quot;, ylab=&quot;Portata (m³/s)&quot;, 
+     main=&quot;Evoluzione della portata nel tempo&quot;)
+points(Idro$tempo, Idro$portata, pch=16, col=&quot;blue&quot;)</code></pre>
+<p><img role="img" src="data:image/png;base64,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" width="672" /></p>
+</div>
+<div id="conclusioni" class="section level2">
+<h2>Conclusioni</h2>
+<p>Il tetto esaminato ha una portata al colmo di circa 0.14 m³/s.
+L’idrogramma mostra una risposta rapida con picco dopo circa 250 secondi
+e un deflusso totale in circa 900 secondi.</p>
+</div>
+<div id="esercizio" class="section level2">
+<h2>Esercizio</h2>
 <ol style="list-style-type: decimal">
-<li><p>ERA5 manipulation and SPEI computation (Marc-Andre Lemay)</p>
-<p><a href="R-code/ERA5/rmarkdown_climat_fabio.html">Exercise</a></p>
-<p>Data: <a href="data/sites/sites.zip">site_location.shp</a></p>
-<p>Data: 2mTemperature.nc (on moodle)</p>
-<p>Data: precipitation.nc (on moodle)</p>
-<p>Data: potential_evapotranspiration.nc (on moodle)</p></li>
-<li><p>Calculation of the flood hydrograph of a green roof using the
-rational formula</p>
-<p><a href="R-code/idrogramma_esercizio.html">Exercise</a></p></li>
+<li>Supponiamo di convertire il tetto del capannone in un tetto
+verde.</li>
 </ol>
-</div>
-<div id="mini-projects-2025" class="section level2">
-<h2>Mini-Projects 2025</h2>
-</div>
-<div id="programs" class="section level2">
-<h2>Programs</h2>
-</div>
-<div id="climate-data" class="section level2">
-<h2>Climate Data</h2>
-<p><a href="https://climexp.knmi.nl/start.cgi">Climate Explorer</a></p>
+<ul>
+<li>Modificare il valore del coefficiente di afflusso, scegliendo un
+valore appropriato dalla letteratura.</li>
+<li>Ricalcolare la portata al colmo utilizzando il nuovo <strong><span class="math inline">\(\varphi\)</span></strong>, mantenendo invariati
+gli altri parametri.</li>
+<li>Commentare come e quanto cambia la portata rispetto al caso
+originale (tetto impermeabile).</li>
+</ul>
+<ol start="2" style="list-style-type: decimal">
+<li>Un tetto verde trattiene parte dell’acqua piovana ma può avere anche
+un sistema di drenaggio che convoglia l’acqua infiltrata verso lo stesso
+punto di raccolta delle grondaie, con un certo ritardo (flusso
+bifasico).</li>
+</ol>
+<ul>
+<li>Calcolare l’idrogramma complessivo (portata nel tempo) considerando:
+un flusso diretto (ruscellamento superficiale) con il coefficiente di
+afflusso scelto precedentemente, e un flusso drenato, che rappresenta il
+50% dell’acqua infiltrata e arriva con un tempo di corrivazione doppio
+rispetto al flusso diretto.</li>
+</ul>
 </div>
 
 

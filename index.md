@@ -39,6 +39,10 @@ This site will be used for lab exercises on specific themes.
       Data: precipitation.nc (on moodle)
       
       Data: potential_evapotranspiration.nc (on moodle)
+      
+4. Calculation of the flood hydrograph of a green roof using the rational formula
+
+      [Exercise](R-code/idrogramma_esercizio.html)
 
 ## Mini-Projects 2025
 

@@ -1,0 +1,129 @@
+---
+title: "Esercizio: Calcolo dell'idrogramma di piena con la formula razionale"
+author: "Fabio Gennaretti"
+output: html_document
+---
+
+## Obiettivo
+
+Calcolare la portata al colmo e costruire un idrogramma di piena semplificato per il tetto di un capannone da trasformare in tetto verde (il nostro bacino idrografico), usando la formula razionale. Si immagina che le grondaie del capannone convergano tutte in un unico punto di raccolta.
+
+Ecco come si presenta la formula:
+
+\( Q_p = \varphi \cdot I \cdot A \)
+
+## Dati del problema
+
+- **\( A \)** (ha): Superficie del tetto in ettari da convertire in  "m²";
+- **\( \varphi \)**: Coefficiente di afflusso, rappresenta la frazione dell’acqua piovana che effettivamente scorre sulla superficie. Dipende dalla permeabilità della copertura (es. impermeabile o verde) e dalla pendenza;
+- **\( I \)** (mm/h): Intensità di pioggia;
+- **\( L \)** (m): Lunghezza massima dal punto più distante del tetto al punto di scolo;
+- **\( v \)** (m/s): Velocità del ruscellamento;
+- **\( d \)** (s): Durata della pioggia.
+
+## Calcoli
+
+I calcoli utilizzano i parametri fisici e idrologici necessari per calcolare **\( Q_p \)** (m³/s): la portata al colmo, ovvero la massima portata d’acqua che defluisce dal tetto al punto di scolo durante l’evento di pioggia;
+
+```{r setup, include=TRUE}
+# Superficie del tetto in ettari
+A_ha <- 1
+
+# Conversione della superficie da ettari a metri quadrati (1 ha = 10.000 m²)
+A_m2 <- A_ha * 10000
+
+# Coefficiente di afflusso (φ): frazione dell'acqua piovana che genera deflusso
+phi <- 1
+
+# Intensità della pioggia in mm/h
+I_mm_h <- 50
+
+# Conversione dell’intensità da mm/h a m/s
+# (1 mm = 0.001 m; 1 h = 3600 s)
+I_m_s <- I_mm_h / 1000 / 3600
+
+# Lunghezza del percorso di deflusso (dal punto più lontano al punto di raccolta) in metri
+L <- 150
+
+# Velocità di ruscellamento in m/s
+v <- 0.6
+
+# Tempo di corrivazione (tempo necessario affinché l'acqua raggiunga il punto di scolo)
+Tc_sec <- L / v
+
+# Tempo di discesa dell’idrogramma (stimato come 2 volte Tc)
+Tdiscesa <- 2 * Tc_sec
+
+# Durata della pioggia in secondi
+d <- 400
+
+# Calcolo della portata al colmo (Qp) con la formula razionale: Qp = φ * I * A
+Qp <- phi * I_m_s * A_m2
+
+# Visualizzazione del risultato della portata al colmo in m³/s
+Qp
+```
+
+## Costruzione dell'idrogramma (semplificato, trapezoidale)
+
+- Tempo di corrivazione: `r round(Tc_sec, 1)` secondi — è il tempo impiegato dalla goccia più lontana per raggiungere la sezione di chiusura;
+- Tempo di discesa dell’idrogramma: `r round(Tdiscesa, 1)` secondi — stimato come due volte il tempo di corrivazione;
+- Durata totale dell’evento: `r ceiling(d + Tdiscesa)` secondi — somma della durata della pioggia e della fase di deflusso;
+- Portata al colmo (picco di portata): `r round(Qp, 2)` m³/s — portata massima calcolata con la formula razionale.
+
+Queste stime saranno utilizzate per costruire un idrogramma di piena semplificato, ovvero la curva che descrive l’andamento della portata nel tempo durante e dopo l’evento di pioggia.
+
+```{r idrogramma, echo=TRUE, fig.width=7, fig.height=4}
+# Preparare il data.frame con una time series in cui calcolare l'idrogramma
+Idro = data.frame(tempo = seq(0,ceiling(Tc_sec+d+Tdiscesa),by=10))
+
+#' Funzione per calcolare l'idrogramma (portata nel tempo) usando un'approssimazione trapezoidale
+#'
+#' @param tempo vettore dei tempi (in secondi) in cui vogliamo calcolare la portata;
+#' @param Qp portata al colmo (in m³/s), cioè il valore massimo della portata durante 
+#' un evento di durata > Tc_sec;
+#' @param Tdiscesa: durata della fase di decrescita della portata (in secondi),
+#' stimata come 2 volte il tempo di corrivazione.
+#'
+#' @return Restituire il vettore delle portate
+calcola_portata_lapply <- function(tempo, Qp, Tdiscesa) {
+  # Usare lapply per applicare la funzione a ogni elemento di tempo
+  portata <- lapply(tempo, function(t) {
+    if (t <= d & t <= Tc_sec) {
+      return(t / Tc_sec * Qp)  # Prima fase: proporzionale al tempo
+    } else if (t <= d & t > Tc_sec) {
+      return(1 * Qp)  # Seconda fase: valore al picco
+    } else {
+      return((1-((t-d)/Tdiscesa)) * ifelse(d < Tc_sec, d/Tc_sec, 1) * Qp)  # Terza fase: decrescita
+    }
+  })
+
+  # Restituire il vettore delle portate e impedire che la portata sia < 0
+  return(ifelse(portata<0,0, unlist(portata)))
+}
+
+# Applicare la funzione a Idro$tempo
+Idro$portata <- calcola_portata_lapply(Idro$tempo, Qp, Tdiscesa)
+
+# Visualizzazione del risultato
+plot(Idro$tempo, Idro$portata, type="l", col="blue", 
+     xlab="Tempo (s)", ylab="Portata (m³/s)", 
+     main="Evoluzione della portata nel tempo")
+points(Idro$tempo, Idro$portata, pch=16, col="blue")
+```
+
+## Conclusioni
+
+Il tetto esaminato ha una portata al colmo di circa `r round(Qp, 2)` m³/s. L’idrogramma mostra una risposta rapida con picco dopo circa `r round(Tc_sec, 1)` secondi e un deflusso totale in circa `r ceiling(d + Tdiscesa)` secondi.
+
+## Esercizio
+
+1. Supponiamo di convertire il tetto del capannone in un tetto verde.
+- Modificare il valore del coefficiente di afflusso, scegliendo un valore appropriato dalla letteratura.
+- Ricalcolare la portata al colmo utilizzando il nuovo **\( \varphi \)**, mantenendo invariati gli altri parametri.
+- Commentare come e quanto cambia la portata rispetto al caso originale (tetto impermeabile).
+
+2. Un tetto verde trattiene parte dell’acqua piovana ma può avere anche un sistema di drenaggio che convoglia l’acqua infiltrata verso lo stesso punto di raccolta delle grondaie, con un certo ritardo (flusso bifasico).
+- Calcolare l’idrogramma complessivo (portata nel tempo) considerando: un flusso diretto (ruscellamento superficiale) con il coefficiente di afflusso scelto precedentemente, e un flusso drenato, che rappresenta il 50% dell’acqua infiltrata e arriva con un tempo di corrivazione doppio rispetto al flusso diretto.
+
+
