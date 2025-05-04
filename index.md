@@ -43,6 +43,10 @@ This site will be used for lab exercises on specific themes.
 4. Calculation of the flood hydrograph of a green roof using the rational formula
 
       [Exercise](R-code/idrogramma_esercizio.html)
+      
+5. Exercise: Effect of Trees on Urban Heat Island Mitigation
+
+      [Exercise](R-code/isola_calore_urbana_mod.html)
 
 ## Mini-Projects 2025
 

@@ -1,0 +1,132 @@
+
+---
+title: "Esercizio: Effetto degli alberi sulla mitigazione dell'isola di calore urbana"
+author: "Fabio Gennaretti - LM FORESPA - Cambiamenti Climatici e Infrastrutture Verdi Territoriali e Urbane"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduzione
+
+Questa esercitazione mostra come stimare la riduzione della temperatura dell’aria dovuta all’**ombreggiamento** e all’**evapotraspirazione** degli alberi in ambiente urbano.
+
+Partiamo dal **bilancio energetico** di una zona ombreggiata vs. una esposta al sole che sono differenti
+
+\[
+Q∗ = Q_H + LE + Q_G + Q_S
+\]
+
+Q∗ = radiazione netta (saldo tra entrata e uscita radiativa)
+
+Q~H~ = flusso di calore sensibile (verso l’aria)
+
+LE = flusso di calore latente (evaporazione/traspirazione)
+
+Q~G~ = flusso verso il suolo
+
+Q~S~ = variazione dell’energia stoccata
+
+L'**ombreggiamento** cambia il calore sensibile irradiato dalla superfice
+
+La **traspirazione** aumenta la parte di calore latente spesa per il cambio di stato dell'acqua in vapore
+
+## Parametri ambientali
+
+<!-- In condizioni diurne stabili e soleggiate, il calore sensibile può influenzare lo strato d'aria vicino al suolo per un tempo dell’ordine di pochi minuti (100–600 s) prima di essere rimescolato. -->
+
+```{r}
+# Parametri noti o stimati
+
+# Per il calcolo della radiazione netta
+S <- 800              # Radiazione solare globale in W/m²
+alpha_suolo <- 0.05   # Albedo del suolo nudo/asfalto
+alpha_ombra <- 0.25   # Albedo sotto la chioma o su prato
+
+# Per il calcolo del calore sensibile irradiato dala superfice
+beta_suolo <- 0.8     # Frazione di energia trasformata in calore sensibile (suolo secco)
+beta_ombra <- 0.4     # Frazione sotto chioma (più umida)
+
+# Per il calcolo del calore latente
+E <- 0.0001           # kg H2O / m² / s (~0.36 mm/h)
+lambda <- 2.45e6      # J/kg, calore latente di vaporizzazione
+
+# Parametri di stato
+rho <- 1.2            # kg/m³, densità dell'aria
+cp <- 1005            # J/(kg·K), capacità termica specifica
+h <- 2                # m, spessore dello strato d'aria influenzato
+delta_t <- 3600       # 1 ora in secondi
+```
+
+## Calore sensibile irradiato dalla superfice al sole e in ombra 
+
+Usiamo la formula:
+
+\[
+Q_H \approx \beta \cdot (1 - \alpha) \cdot S
+\]
+
+```{r}
+QH_suolo <- beta_suolo * (1 - alpha_suolo) * S
+QH_ombra <- beta_ombra * (1 - alpha_ombra) * S
+delta_QH <- QH_suolo - QH_ombra
+
+QH_suolo
+QH_ombra
+delta_QH  # differenza tra sole e ombra
+```
+
+## Effetto sulla temperatura dell’aria dell'ombreggiamento
+
+Usiamo la formula derivata dal bilancio energetico:
+
+\[
+\Delta T = \frac{\Delta Q_{surf} \cdot \Delta t}{\rho \cdot c_p \cdot h}
+\]
+
+```{r}
+delta_T_ombra <- (delta_QH * delta_t) / (rho * cp * h)
+delta_T_ombra
+```
+
+## Effetto della traspirazione
+
+Assumiamo una traspirazione media:
+
+```{r}
+LE <- lambda * E  # W/m²
+LE
+```
+
+Calcolo della riduzione di temperatura associata a LE:
+
+\[
+\Delta T = \frac{LE \cdot \Delta t}{\rho \cdot c_p \cdot h}
+\]
+
+```{r}
+delta_T_evapo <- (LE * delta_t) / (rho * cp * h)
+delta_T_evapo
+```
+
+## Sommando gli effetti
+
+```{r}
+delta_T_totale <- delta_T_ombra + delta_T_evapo
+delta_T_totale
+```
+
+## Conclusioni
+
+La presenza di alberi può ridurre la temperatura dell’aria localmente di:
+
+- Circa `r round(delta_T_ombra, 2)` °C per **ombreggiamento**
+- Circa `r round(delta_T_evapo, 2)` °C per **evapotraspirazione**
+- **Totale**: `r round(delta_T_totale, 2)` °C di raffrescamento stimato
+
+Questi calcoli sono meccanicistici e indicativi: mostrano l'importanza delle infrastrutture verdi nella mitigazione del microclima urbano, ma non sono ben parametrizzati. 
+
+**Secondo voi, cosa potrebbe causare questi valori anomali?**
+

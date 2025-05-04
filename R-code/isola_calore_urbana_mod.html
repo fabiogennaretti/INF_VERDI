@@ -9,9 +9,10 @@
 <meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
 
 
+<meta name="author" content="Fabio Gennaretti - LM FORESPA - Cambiamenti Climatici e Infrastrutture Verdi Territoriali e Urbane" />
 
 
-<title>LM FORESPA - Cambiamenti Climatici e Infrastrutture Verdi Territoriali e Urbane</title>
+<title>Esercizio: Effetto degli alberi sulla mitigazione dell’isola di calore urbana</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -348,56 +349,120 @@ display: none;
 
 
 
-<h1 class="title toc-ignore">LM FORESPA - Cambiamenti Climatici e
-Infrastrutture Verdi Territoriali e Urbane</h1>
+<h1 class="title toc-ignore">Esercizio: Effetto degli alberi sulla
+mitigazione dell’isola di calore urbana</h1>
+<h4 class="author">Fabio Gennaretti - LM FORESPA - Cambiamenti Climatici
+e Infrastrutture Verdi Territoriali e Urbane</h4>
 
 </div>
 
 
-<p>LM FORESPA</p>
-<p>CFU previsti: 6</p>
-<p>Docente: Fabio Gennaretti</p>
-<p>Mail: <a href="mailto:f.gennaretti@univpm.it" class="email">f.gennaretti@univpm.it</a></p>
-<p>This material is available under a license [CC0 1.0 Universal]</p>
-<div id="info-and-syllabus" class="section level2">
-<h2>Info and syllabus</h2>
-<p><a href="pdf/Syllabus_Clima_Infrastrutture_Verdi_2.pdf">Syllabus</a></p>
-<p>All lectures of the course will be provided in the Moodle
-application. This site will be used for lab exercises on specific
-themes.</p>
+<div id="introduzione" class="section level2">
+<h2>Introduzione</h2>
+<p>Questa esercitazione mostra come stimare la riduzione della
+temperatura dell’aria dovuta all’<strong>ombreggiamento</strong> e
+all’<strong>evapotraspirazione</strong> degli alberi in ambiente
+urbano.</p>
+<p>Partiamo dal <strong>bilancio energetico</strong> di una zona
+ombreggiata vs. una esposta al sole che sono differenti</p>
+<p><span class="math display">\[
+Q∗ = Q_H + LE + Q_G + Q_S
+\]</span></p>
+<p>Q∗ = radiazione netta (saldo tra entrata e uscita radiativa)</p>
+<p>Q<sub>H</sub> = flusso di calore sensibile (verso l’aria)</p>
+<p>LE = flusso di calore latente (evaporazione/traspirazione)</p>
+<p>Q<sub>G</sub> = flusso verso il suolo</p>
+<p>Q<sub>S</sub> = variazione dell’energia stoccata</p>
+<p>L’<strong>ombreggiamento</strong> cambia il calore sensibile
+irradiato dalla superfice</p>
+<p>La <strong>traspirazione</strong> aumenta la parte di calore latente
+spesa per il cambio di stato dell’acqua in vapore</p>
 </div>
-<div id="themes" class="section level2">
-<h2>Themes</h2>
-<!-- 
-1. Exemple theme
+<div id="parametri-ambientali" class="section level2">
+<h2>Parametri ambientali</h2>
+<!-- In condizioni diurne stabili e soleggiate, il calore sensibile può influenzare lo strato d'aria vicino al suolo per un tempo dell’ordine di pochi minuti (100–600 s) prima di essere rimescolato. -->
+<pre class="r"><code># Parametri noti o stimati
 
-      [Exercise](R-code/test.html)
-      
-      Data: [Pivot.SC.crn.csv](data/test.csv)
--->
-<ol style="list-style-type: decimal">
-<li><p>ERA5 manipulation and SPEI computation (Marc-Andre Lemay)</p>
-<p><a href="R-code/ERA5/rmarkdown_climat_fabio.html">Exercise</a></p>
-<p>Data: <a href="data/sites/sites.zip">site_location.shp</a></p>
-<p>Data: 2mTemperature.nc (on moodle)</p>
-<p>Data: precipitation.nc (on moodle)</p>
-<p>Data: potential_evapotranspiration.nc (on moodle)</p></li>
-<li><p>Calculation of the flood hydrograph of a green roof using the
-rational formula</p>
-<p><a href="R-code/idrogramma_esercizio.html">Exercise</a></p></li>
-<li><p>Exercise: Effect of Trees on Urban Heat Island Mitigation</p>
-<p><a href="R-code/isola_calore_urbana_mod.html">Exercise</a></p></li>
-</ol>
+# Per il calcolo della radiazione netta
+S &lt;- 800              # Radiazione solare globale in W/m²
+alpha_suolo &lt;- 0.05   # Albedo del suolo nudo/asfalto
+alpha_ombra &lt;- 0.25   # Albedo sotto la chioma o su prato
+
+# Per il calcolo del calore sensibile irradiato dala superfice
+beta_suolo &lt;- 0.8     # Frazione di energia trasformata in calore sensibile (suolo secco)
+beta_ombra &lt;- 0.4     # Frazione sotto chioma (più umida)
+
+# Per il calcolo del calore latente
+E &lt;- 0.0001           # kg H2O / m² / s (~0.36 mm/h)
+lambda &lt;- 2.45e6      # J/kg, calore latente di vaporizzazione
+
+# Parametri di stato
+rho &lt;- 1.2            # kg/m³, densità dell&#39;aria
+cp &lt;- 1005            # J/(kg·K), capacità termica specifica
+h &lt;- 2                # m, spessore dello strato d&#39;aria influenzato
+delta_t &lt;- 3600       # 1 ora in secondi</code></pre>
 </div>
-<div id="mini-projects-2025" class="section level2">
-<h2>Mini-Projects 2025</h2>
+<div id="calore-sensibile-irradiato-dalla-superfice-al-sole-e-in-ombra" class="section level2">
+<h2>Calore sensibile irradiato dalla superfice al sole e in ombra</h2>
+<p>Usiamo la formula:</p>
+<p><span class="math display">\[
+Q_H \approx \beta \cdot (1 - \alpha) \cdot S
+\]</span></p>
+<pre class="r"><code>QH_suolo &lt;- beta_suolo * (1 - alpha_suolo) * S
+QH_ombra &lt;- beta_ombra * (1 - alpha_ombra) * S
+delta_QH &lt;- QH_suolo - QH_ombra
+
+QH_suolo</code></pre>
+<pre><code>## [1] 608</code></pre>
+<pre class="r"><code>QH_ombra</code></pre>
+<pre><code>## [1] 240</code></pre>
+<pre class="r"><code>delta_QH  # differenza tra sole e ombra</code></pre>
+<pre><code>## [1] 368</code></pre>
 </div>
-<div id="programs" class="section level2">
-<h2>Programs</h2>
+<div id="effetto-sulla-temperatura-dellaria-dellombreggiamento" class="section level2">
+<h2>Effetto sulla temperatura dell’aria dell’ombreggiamento</h2>
+<p>Usiamo la formula derivata dal bilancio energetico:</p>
+<p><span class="math display">\[
+\Delta T = \frac{\Delta Q_{surf} \cdot \Delta t}{\rho \cdot c_p \cdot h}
+\]</span></p>
+<pre class="r"><code>delta_T_ombra &lt;- (delta_QH * delta_t) / (rho * cp * h)
+delta_T_ombra</code></pre>
+<pre><code>## [1] 549.2537</code></pre>
 </div>
-<div id="climate-data" class="section level2">
-<h2>Climate Data</h2>
-<p><a href="https://climexp.knmi.nl/start.cgi">Climate Explorer</a></p>
+<div id="effetto-della-traspirazione" class="section level2">
+<h2>Effetto della traspirazione</h2>
+<p>Assumiamo una traspirazione media:</p>
+<pre class="r"><code>LE &lt;- lambda * E  # W/m²
+LE</code></pre>
+<pre><code>## [1] 245</code></pre>
+<p>Calcolo della riduzione di temperatura associata a LE:</p>
+<p><span class="math display">\[
+\Delta T = \frac{LE \cdot \Delta t}{\rho \cdot c_p \cdot h}
+\]</span></p>
+<pre class="r"><code>delta_T_evapo &lt;- (LE * delta_t) / (rho * cp * h)
+delta_T_evapo</code></pre>
+<pre><code>## [1] 365.6716</code></pre>
+</div>
+<div id="sommando-gli-effetti" class="section level2">
+<h2>Sommando gli effetti</h2>
+<pre class="r"><code>delta_T_totale &lt;- delta_T_ombra + delta_T_evapo
+delta_T_totale</code></pre>
+<pre><code>## [1] 914.9254</code></pre>
+</div>
+<div id="conclusioni" class="section level2">
+<h2>Conclusioni</h2>
+<p>La presenza di alberi può ridurre la temperatura dell’aria localmente
+di:</p>
+<ul>
+<li>Circa 549.25 °C per <strong>ombreggiamento</strong></li>
+<li>Circa 365.67 °C per <strong>evapotraspirazione</strong></li>
+<li><strong>Totale</strong>: 914.93 °C di raffrescamento stimato</li>
+</ul>
+<p>Questi calcoli sono meccanicistici e indicativi: mostrano
+l’importanza delle infrastrutture verdi nella mitigazione del microclima
+urbano, ma non sono ben parametrizzati.</p>
+<p><strong>Secondo voi, cosa potrebbe causare questi valori
+anomali?</strong></p>
 </div>
 
 

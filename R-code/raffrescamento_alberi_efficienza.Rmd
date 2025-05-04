@@ -1,0 +1,40 @@
+
+---
+title: "Mitigazione dell'isola di calore urbana: effetto degli alberi"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Effetto Evapotraspirazione
+
+Calcoliamo l'effetto della **traspirazione** di una pianta sul raffrescamento dell'aria sovrastante. Questo effetto è legato al calore latente (LE) disperso nell'atmosfera durante l'evaporazione dell'acqua.
+
+### Parametri
+
+```{r}
+# Parametri fisici
+lambda <- 2.45e6  # Calore latente di vaporizzazione in J/kg
+E <- 0.0002       # Traspirazione in kg H2O/m²/s (0.2 mm/h)
+delta_t <- 10   # Tempo in secondi (1 ora)
+rho_air <- 1.2    # Densità dell’aria in kg/m³
+cp_air <- 1005    # Capacità termica specifica dell’aria in J/kg/K
+h <- 2            # Altezza dello strato d'aria raffreddato in m
+eta <- 0.05       # Efficienza di raffreddamento (ipotesi: solo 5% del LE raffredda direttamente l'aria)
+
+# Calcolo LE (in W/m²)
+LE <- lambda * E
+
+# Calcolo raffrescamento ΔT
+delta_T <- eta * (LE * delta_t) / (rho_air * cp_air * h)
+
+cat(sprintf("Flusso di calore latente (LE): %.2f W/m²\n", LE))
+cat(sprintf("Raffrescamento stimato dell’aria (con efficienza %.0f%%): %.2f °C in un’ora\n", eta * 100, delta_T))
+```
+
+### Commento
+
+Senza introdurre un fattore di efficienza, il raffrescamento risultava **sovrastimato** (decine o centinaia di °C), perché il calore latente non si trasferisce interamente all'aria bassa. In questa simulazione, **solo il 5%** del LE contribuisce al raffrescamento diretto dell'aria nei primi metri.
+

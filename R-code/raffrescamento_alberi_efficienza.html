@@ -11,7 +11,7 @@
 
 
 
-<title>LM FORESPA - Cambiamenti Climatici e Infrastrutture Verdi Territoriali e Urbane</title>
+<title>Mitigazione dell’isola di calore urbana: effetto degli alberi</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -348,56 +348,48 @@ display: none;
 
 
 
-<h1 class="title toc-ignore">LM FORESPA - Cambiamenti Climatici e
-Infrastrutture Verdi Territoriali e Urbane</h1>
+<h1 class="title toc-ignore">Mitigazione dell’isola di calore urbana:
+effetto degli alberi</h1>
 
 </div>
 
 
-<p>LM FORESPA</p>
-<p>CFU previsti: 6</p>
-<p>Docente: Fabio Gennaretti</p>
-<p>Mail: <a href="mailto:f.gennaretti@univpm.it" class="email">f.gennaretti@univpm.it</a></p>
-<p>This material is available under a license [CC0 1.0 Universal]</p>
-<div id="info-and-syllabus" class="section level2">
-<h2>Info and syllabus</h2>
-<p><a href="pdf/Syllabus_Clima_Infrastrutture_Verdi_2.pdf">Syllabus</a></p>
-<p>All lectures of the course will be provided in the Moodle
-application. This site will be used for lab exercises on specific
-themes.</p>
-</div>
-<div id="themes" class="section level2">
-<h2>Themes</h2>
-<!-- 
-1. Exemple theme
+<div id="effetto-evapotraspirazione" class="section level2">
+<h2>Effetto Evapotraspirazione</h2>
+<p>Calcoliamo l’effetto della <strong>traspirazione</strong> di una
+pianta sul raffrescamento dell’aria sovrastante. Questo effetto è legato
+al calore latente (LE) disperso nell’atmosfera durante l’evaporazione
+dell’acqua.</p>
+<div id="parametri" class="section level3">
+<h3>Parametri</h3>
+<pre class="r"><code># Parametri fisici
+lambda &lt;- 2.45e6  # Calore latente di vaporizzazione in J/kg
+E &lt;- 0.0002       # Traspirazione in kg H2O/m²/s (0.2 mm/h)
+delta_t &lt;- 10   # Tempo in secondi (1 ora)
+rho_air &lt;- 1.2    # Densità dell’aria in kg/m³
+cp_air &lt;- 1005    # Capacità termica specifica dell’aria in J/kg/K
+h &lt;- 2            # Altezza dello strato d&#39;aria raffreddato in m
+eta &lt;- 0.05       # Efficienza di raffreddamento (ipotesi: solo 5% del LE raffredda direttamente l&#39;aria)
 
-      [Exercise](R-code/test.html)
-      
-      Data: [Pivot.SC.crn.csv](data/test.csv)
--->
-<ol style="list-style-type: decimal">
-<li><p>ERA5 manipulation and SPEI computation (Marc-Andre Lemay)</p>
-<p><a href="R-code/ERA5/rmarkdown_climat_fabio.html">Exercise</a></p>
-<p>Data: <a href="data/sites/sites.zip">site_location.shp</a></p>
-<p>Data: 2mTemperature.nc (on moodle)</p>
-<p>Data: precipitation.nc (on moodle)</p>
-<p>Data: potential_evapotranspiration.nc (on moodle)</p></li>
-<li><p>Calculation of the flood hydrograph of a green roof using the
-rational formula</p>
-<p><a href="R-code/idrogramma_esercizio.html">Exercise</a></p></li>
-<li><p>Exercise: Effect of Trees on Urban Heat Island Mitigation</p>
-<p><a href="R-code/isola_calore_urbana_mod.html">Exercise</a></p></li>
-</ol>
+# Calcolo LE (in W/m²)
+LE &lt;- lambda * E
+
+# Calcolo raffrescamento ΔT
+delta_T &lt;- eta * (LE * delta_t) / (rho_air * cp_air * h)
+
+cat(sprintf(&quot;Flusso di calore latente (LE): %.2f W/m²\n&quot;, LE))</code></pre>
+<pre><code>## Flusso di calore latente (LE): 490.00 W/m²</code></pre>
+<pre class="r"><code>cat(sprintf(&quot;Raffrescamento stimato dell’aria (con efficienza %.0f%%): %.2f °C in un’ora\n&quot;, eta * 100, delta_T))</code></pre>
+<pre><code>## Raffrescamento stimato dell’aria (con efficienza 5%): 0.10 °C in un’ora</code></pre>
 </div>
-<div id="mini-projects-2025" class="section level2">
-<h2>Mini-Projects 2025</h2>
+<div id="commento" class="section level3">
+<h3>Commento</h3>
+<p>Senza introdurre un fattore di efficienza, il raffrescamento
+risultava <strong>sovrastimato</strong> (decine o centinaia di °C),
+perché il calore latente non si trasferisce interamente all’aria bassa.
+In questa simulazione, <strong>solo il 5%</strong> del LE contribuisce
+al raffrescamento diretto dell’aria nei primi metri.</p>
 </div>
-<div id="programs" class="section level2">
-<h2>Programs</h2>
-</div>
-<div id="climate-data" class="section level2">
-<h2>Climate Data</h2>
-<p><a href="https://climexp.knmi.nl/start.cgi">Climate Explorer</a></p>
 </div>
 
 
